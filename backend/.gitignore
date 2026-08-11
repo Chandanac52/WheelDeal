@@ -1,0 +1,8 @@
+node_modules/
+uploads/
+.env
+*.db
+dev.db
+firebase-service-account.json
+build/
+dist/

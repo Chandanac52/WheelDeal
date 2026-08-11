@@ -1,0 +1,252 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String?  @unique
+  password  String?
+  name      String
+  phone     String?  @unique
+  avatar    String?
+  role      UserRole @default(BUYER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Which dealer (if any) this account is authorized to sell on behalf of.
+  // Deliberately account-level, not per-listing: an individual seller is
+  // just a User with dealerId = null, and a dealer-affiliated seller is a
+  // User linked to exactly one Dealer. Nothing in the API currently lets a
+  // user set this on themselves — it's only ever written directly (seed
+  // data today; an admin "Verify Dealer" action in a future admin panel).
+  // POST /vehicles derives a new listing's dealerId from THIS field on the
+  // authenticated user, never from client-supplied input — that's what
+  // makes it impossible to list a vehicle under a dealer you're not
+  // actually linked to.
+  dealerId String?
+  dealer   Dealer? @relation(fields: [dealerId], references: [id])
+
+  vehicles  Vehicle[]
+  favorites Favorite[]
+  sentMessages     Message[] @relation("SentMessages")
+  chatParticipants ChatParticipant[]
+  callbackRequests CallbackRequest[]
+  notifications    Notification[]
+}
+
+enum UserRole {
+  BUYER
+  SELLER
+  DEALER
+  ADMIN
+}
+
+model Dealer {
+  id         String   @id @default(cuid())
+  name       String
+  logo       String?
+  rating     Float    @default(4.5)
+  totalCars  Int      @default(0)
+  location   String
+  isVerified Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  vehicles Vehicle[]
+  // Accounts authorized to sell on behalf of this dealer — see User.dealerId.
+  users    User[]
+}
+
+model Vehicle {
+  id              String   @id @default(cuid())
+  name            String
+  category        String
+  images          String[]
+  price           Int
+  originalPrice   Int?
+  discountPercent Int?
+  isFeatured      Boolean  @default(false)
+  rating          Float    @default(4.0)
+  fuelType        String
+  transmission    String
+  year            String
+  seats           String
+  kmDriven        String
+  owners          String
+  condition       String
+  insurance       String
+  rcStatus        String
+  soldCount       String   @default("0")
+  description     String
+  location        String
+  sellerName      String
+  sellerPhone     String
+  sellerAvatar    String?
+  dealerVerified  Boolean  @default(false)
+  status          VehicleStatus @default(ACTIVE)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  sellerId String?
+  seller   User?   @relation(fields: [sellerId], references: [id])
+  dealerId String?
+  dealer   Dealer? @relation(fields: [dealerId], references: [id])
+
+  // Both of these already cascade on delete (onDelete: Cascade below), so
+  // DELETE /vehicles/:id (vehicles.js) can remove a Vehicle row directly —
+  // Prisma/Postgres cleans up every Favorite and CallbackRequest that
+  // pointed at it in the same transaction, with no manual cleanup query
+  // needed and no risk of the delete failing on a leftover foreign key.
+  // Notification.relatedVehicleId is intentionally NOT a relation (just a
+  // plain String below), specifically so a vehicle can always be deleted
+  // without ever being blocked by, or needing to touch, notification rows.
+  favorites        Favorite[]
+  callbackRequests CallbackRequest[]
+
+  // Speeds up the two most common queries: browsing/filtering the active
+  // feed by category, and sorting the newest active listings first.
+  @@index([status, category])
+  @@index([status, createdAt])
+}
+
+enum VehicleStatus {
+  ACTIVE
+  SOLD
+  PENDING
+  REJECTED
+}
+
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    String
+  vehicleId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, vehicleId])
+}
+
+model Chat {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  participants ChatParticipant[]
+  messages     Message[]
+}
+
+model ChatParticipant {
+  id     String @id @default(cuid())
+  chatId String
+  userId String
+
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([chatId, userId])
+}
+
+model Message {
+  id        String    @id @default(cuid())
+  chatId    String
+  senderId  String
+  content   String
+  createdAt DateTime  @default(now())
+  read      Boolean   @default(false)
+  edited    Boolean   @default(false)
+  deleted   Boolean   @default(false)
+
+  chat          Chat           @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender        User           @relation("SentMessages", fields: [senderId], references: [id])
+  notifications Notification[]
+
+  @@index([chatId, createdAt])
+}
+
+model CallbackRequest {
+  id        String   @id @default(cuid())
+  vehicleId String
+  userId    String
+  phone     String
+  status    String   @default("PENDING")
+  createdAt DateTime @default(now())
+
+  // Was missing onDelete: Cascade entirely (defaulted to RESTRICT) — this
+  // is exactly what caused "violates RESTRICT setting of foreign key
+  // constraint CallbackRequest_vehicleId_fkey" when the seed script tried
+  // to delete a vehicle that had a callback request pointing at it.
+  // Favorite/ChatParticipant/Message all already cascade correctly
+  // elsewhere in this schema; this brings CallbackRequest in line with them.
+  // This is also what makes DELETE /vehicles/:id safe today.
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id               String   @id @default(cuid())
+  userId           String
+  // 'message' | 'price_drop' | 'callback' | 'system'
+  type             String
+  title            String
+  body             String
+  read             Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  relatedVehicleId String?
+  relatedChatId    String?
+  // Links a 'message'-type notification to the specific Message it was
+  // generated from. Two things depend on this: (1) collapsing several
+  // rapid messages in the same still-unread conversation into one updating
+  // notification instead of a new row per message, and (2) keeping the
+  // notification's `body` in sync if that message is later edited or
+  // deleted — without this link there was nothing to even go find and fix
+  // when a message changed after the fact.
+  messageId        String?
+  // The phone number to show the seller for a 'callback' notification —
+  // separate from the requester's account phone since they can supply a
+  // different reachable number when requesting the callback.
+  relatedPhone     String?
+  // The buyer/requester this notification is about — currently only set
+  // for 'callback' notifications, where it identifies WHO is asking to be
+  // called back (as opposed to `userId`, which is always the recipient,
+  // i.e. the seller). This is what lets repeated callback requests from
+  // the SAME buyer about the SAME vehicle collapse into one updating row
+  // (see the second @@unique below and the upsert in vehicles.js), while a
+  // request from a DIFFERENT buyer always gets its own separate row —
+  // the seller never has to guess who a given notification is about.
+  relatedUserId    String?
+  // How many times this notification has fired without being replaced by
+  // a new row. Currently only meaningful for 'callback' notifications —
+  // incremented on every repeat request from the same buyer about the
+  // same vehicle (see vehicles.js). The Notifications screen shows this as
+  // "Callback requested (N)" once it passes 1, so the seller can see at a
+  // glance how many times someone's tried to reach them, instead of the
+  // list just filling up with N near-identical rows for the same person.
+  count            Int      @default(1)
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message Message? @relation(fields: [messageId], references: [id], onDelete: SetNull)
+
+  // At most one 'message'-type notification per (recipient, chat) — this is
+  // what makes the Notifications screen behave like every other chat app's
+  // notification list: one entry per conversation that keeps updating and
+  // reappearing as unread, not a growing history log of every message ever
+  // sent. relatedChatId is NULL for 'price_drop'/'callback' notifications,
+  // and Postgres treats NULLs as distinct for uniqueness purposes, so this
+  // constraint has no effect on those — only 'message' rows are deduped.
+  @@unique([userId, relatedChatId, type])
+  // Same idea, for 'callback' notifications: at most one row per (seller,
+  // vehicle, requester) — repeat callback requests from the same buyer
+  // about the same vehicle update this one row (and bump `count`) instead
+  // of piling up as separate rows. relatedVehicleId/relatedUserId are NULL
+  // on 'message'/'price_drop' rows, and Postgres treats NULLs as distinct,
+  // so this constraint has no effect on those — only 'callback' rows are
+  // deduped, and only against the same requester.
+  @@unique([userId, relatedVehicleId, relatedUserId, type])
+  @@index([userId, createdAt])
+}
