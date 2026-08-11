@@ -74,7 +74,13 @@ class AllDealersScreen extends ConsumerWidget {
                           children: [
                             const Icon(Icons.star_rounded, size: 15, color: Colors.amber),
                             const SizedBox(width: 2),
-                            Text(dealer.rating.toStringAsFixed(1)),
+                            // FIX: dealer.rating is nullable now — null
+                            // until a real buyer has left at least one
+                            // review (see DealerModel) — so this can't
+                            // unconditionally call .toStringAsFixed(1)
+                            // anymore. Shown as "New" instead of crashing
+                            // or faking a number for an unreviewed dealer.
+                            Text(dealer.rating == null ? 'New' : dealer.rating!.toStringAsFixed(1)),
                           ],
                         ),
                         const SizedBox(width: 4),

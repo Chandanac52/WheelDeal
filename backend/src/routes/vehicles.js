@@ -59,7 +59,6 @@ async function getFeaturedIds() {
     where: { status: 'ACTIVE' },
     orderBy: [
       { favorites: { _count: 'desc' } },
-      { rating: 'desc' },
       { createdAt: 'desc' },
     ],
     take: featuredCount,
@@ -109,7 +108,10 @@ function toVehicleResponse(vehicle, favoriteIds = new Set(), featuredIds = new S
     originalPriceAmount: vehicle.originalPrice,
     discountPercent: vehicle.discountPercent,
     isFeatured: featuredIds.has(vehicle.id),
-    rating: vehicle.rating,
+    // Deliberately no per-vehicle `rating` field here anymore — see the
+    // comment on Dealer.reviews in schema.prisma for why a listing was
+    // never a valid thing to rate in the first place. Only Dealer has a
+    // rating now, computed live in dealers.js from real Review rows.
     isFavorite: favoriteIds.has(vehicle.id),
     fuelType: vehicle.fuelType,
     transmission: vehicle.transmission,
@@ -171,7 +173,6 @@ router.get('/', optionalAuth, async (req, res) => {
   if (isFeaturedRequest && !sort) {
     orderBy = [
       { favorites: { _count: 'desc' } },
-      { rating: 'desc' },
       { createdAt: 'desc' },
     ];
   }
@@ -272,7 +273,6 @@ router.post(
         // Never trust a client-supplied discountPercent — always derive it
         // from price/originalPrice so it can never say something untrue.
         discountPercent: computeDiscountPercent(price, originalPrice),
-        rating: 4.0,
         fuelType: data.fuelType,
         transmission: data.transmission,
         year: data.year,

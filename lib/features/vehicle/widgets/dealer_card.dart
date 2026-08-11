@@ -5,7 +5,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../models/vehicle_model.dart';
 
 /// Seller information card shown on the Vehicle Details screen
-/// (avatar, name, dealer, rating, location, Call + Chat buttons).
+/// (avatar, name, dealer, location, Call + Chat buttons).
 class DealerCard extends StatelessWidget {
   final VehicleModel vehicle;
   final VoidCallback? onCall;
@@ -77,21 +77,17 @@ class DealerCard extends StatelessWidget {
                         fontSize: 13,
                       ),
                     ),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        const Icon(Icons.star,
-                            size: 14, color: AppColors.primary),
-                        const SizedBox(width: 3),
-                        Text(
-                          "${vehicle.rating} · listings",
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
+                    // FIX: this used to show "${vehicle.rating} · listings"
+                    // here — a per-VEHICLE rating that never had a real
+                    // source (see VehicleModel/schema.prisma: there's no
+                    // such thing anymore). A star rating only makes sense
+                    // once someone has actually dealt with the SELLER, not
+                    // the listing, and that's now shown on the Dealer
+                    // Profile screen instead (dealer.rating, computed live
+                    // from real reviews) — this card just links there via
+                    // the dealer name above; it doesn't duplicate a number
+                    // here that this screen has no honest way to produce
+                    // for an individual (non-dealer) seller anyway.
                   ],
                 ),
               ),

@@ -79,11 +79,23 @@ class DealerCard extends StatelessWidget {
                     children: [
                       const Icon(Icons.star, size: 14, color: AppColors.primary),
                       const SizedBox(width: 3),
-                      Text(
-                        dealer.rating.toString(),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 12,
+                      Expanded(
+                        child: Text(
+                          // dealer.rating is null until a real buyer has
+                          // left at least one review (see DealerModel) —
+                          // shown honestly as "New" rather than a made-up
+                          // number. Once there's a rating, the review
+                          // count rides along in parentheses so "4.8" and
+                          // "4.8 from 1 review" don't look equally solid.
+                          dealer.rating == null
+                              ? 'New'
+                              : '${dealer.rating!.toStringAsFixed(1)} (${dealer.reviewCount})',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 8),

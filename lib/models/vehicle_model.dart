@@ -9,7 +9,6 @@ class VehicleModel {
   final int? originalPriceAmount;
   final int? discountPercent;
   final bool isFeatured;
-  final double rating;
   final bool isFavorite;
 
   final String fuelType;
@@ -40,7 +39,6 @@ class VehicleModel {
     required this.category,
     required this.images,
     required this.price,
-    required this.rating,
     required this.fuelType,
     required this.transmission,
     required this.year,
@@ -81,7 +79,6 @@ class VehicleModel {
       originalPriceAmount: (json['originalPriceAmount'] as num?)?.toInt(),
       discountPercent: json['discountPercent'] as int?,
       isFeatured: json['isFeatured'] as bool? ?? false,
-      rating: (json['rating'] as num?)?.toDouble() ?? 4.0,
       isFavorite: json['isFavorite'] as bool? ?? false,
       fuelType: json['fuelType'] as String,
       transmission: json['transmission'] as String,
@@ -121,7 +118,6 @@ class VehicleModel {
       originalPriceAmount: originalPriceAmount,
       discountPercent: discountPercent,
       isFeatured: isFeatured,
-      rating: rating,
       isFavorite: isFavorite ?? this.isFavorite,
       fuelType: fuelType,
       transmission: transmission,

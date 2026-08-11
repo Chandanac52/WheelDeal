@@ -165,6 +165,31 @@ class VehicleService {
     }
   }
 
+  /// Every review a dealer has actually received, newest first — powers
+  /// the review list on the Dealer Profile screen.
+  Future<List<DealerReviewModel>> getDealerReviews(String dealerId) async {
+    if (ApiConstants.useMockData) return [];
+    final data = await _api.get('/dealers/$dealerId/reviews');
+    final list = data['reviews'] as List<dynamic>;
+    return list.map((e) => DealerReviewModel.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  /// Submits (or updates, if the signed-in buyer already reviewed this
+  /// dealer) a 1–5 star rating with an optional comment. This is the only
+  /// thing that actually feeds Dealer.rating — there's no other path that
+  /// changes it, by design (see the Review model comment in
+  /// schema.prisma): a dealer's rating is real user input, never a stored
+  /// default or something a listing edit can touch.
+  Future<void> submitDealerReview(String dealerId, {required int rating, String? comment}) async {
+    if (ApiConstants.useMockData) {
+      throw ApiException('Reviews require the live backend, not mock mode.');
+    }
+    await _api.post('/dealers/$dealerId/reviews', body: {
+      'rating': rating,
+      'comment': ?comment,
+    });
+  }
+
   Future<List<String>> getFavoriteIds() async {
     if (ApiConstants.useMockData) return [];
     final data = await _api.get('/favorites');

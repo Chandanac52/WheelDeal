@@ -7,12 +7,19 @@ import '../../models/vehicle_model.dart';
 class VehicleRepository {
   VehicleRepository._();
 
+  // FIX: `rating:` used to be passed here for every dealer — but
+  // DealerModel.rating is now nullable and only ever set from real Review
+  // rows fetched from the backend (see dealers.js / schema.prisma); a
+  // const mock entry can't honestly claim "4.8 from real buyers" because
+  // there are no buyers in mock mode. Left null (the default) so mock
+  // mode shows the same honest "New" state the live app shows for an
+  // unreviewed dealer, rather than faking a number here that the real
+  // backend would never produce for a brand-new dealer.
   static const List<DealerModel> mockDealers = [
     DealerModel(
       id: "1",
       name: "AutoPrime Motors",
       logo: "assets/images/dealers/dealer1.png",
-      rating: 4.8,
       totalCars: 47,
       location: "Banjara Hills, Hyderabad",
       isVerified: true,
@@ -21,7 +28,6 @@ class VehicleRepository {
       id: "2",
       name: "Prestige Auto Hub",
       logo: "assets/images/dealers/dealer2.png",
-      rating: 4.6,
       totalCars: 63,
       location: "Kondapur, Hyderabad",
       isVerified: true,
@@ -30,7 +36,6 @@ class VehicleRepository {
       id: "3",
       name: "Elite Cars",
       logo: "assets/images/dealers/dealer3.png",
-      rating: 4.7,
       totalCars: 35,
       location: "Madhapur, Hyderabad",
       isVerified: false,
@@ -112,6 +117,11 @@ class VehicleRepository {
     ),
   ];
 
+  // FIX: `rating:` used to be passed for every mock vehicle too —
+  // VehicleModel has no `rating` field at all anymore (a listing was never
+  // a valid thing to rate; see the removal of Vehicle.rating in
+  // schema.prisma/vehicles.js). Simply dropped from every entry below —
+  // nothing replaces it, since nothing should.
   static const List<VehicleModel> all = [
     VehicleModel(
       id: "1",
@@ -122,7 +132,6 @@ class VehicleRepository {
       originalPrice: "₹5.5L",
       discountPercent: 12,
       isFeatured: true,
-      rating: 4.3,
       fuelType: "Petrol",
       transmission: "Manual",
       year: "2021",
@@ -151,7 +160,6 @@ class VehicleRepository {
       price: "₹72K",
       originalPrice: "₹85K",
       discountPercent: 15,
-      rating: 4.5,
       fuelType: "Petrol",
       transmission: "Automatic",
       year: "2022",
@@ -181,7 +189,6 @@ class VehicleRepository {
       originalPrice: "₹16.8L",
       discountPercent: 13,
       isFeatured: true,
-      rating: 4.6,
       fuelType: "Electric",
       transmission: "Automatic",
       year: "2023",
@@ -210,7 +217,6 @@ class VehicleRepository {
       price: "₹1.7L",
       originalPrice: "₹1.9L",
       discountPercent: 14,
-      rating: 4.4,
       fuelType: "Petrol",
       transmission: "Manual",
       year: "2021",
@@ -240,7 +246,6 @@ class VehicleRepository {
       originalPrice: "₹13.4L",
       discountPercent: 12,
       isFeatured: true,
-      rating: 4.5,
       fuelType: "Diesel",
       transmission: "Automatic",
       year: "2022",
@@ -269,7 +274,6 @@ class VehicleRepository {
       price: "₹98K",
       originalPrice: "₹1.1L",
       discountPercent: 15,
-      rating: 4.2,
       fuelType: "Petrol",
       transmission: "Manual",
       year: "2020",

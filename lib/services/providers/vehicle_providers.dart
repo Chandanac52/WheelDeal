@@ -26,6 +26,15 @@ final dealerDetailProvider = FutureProvider.family<DealerModel?, String>((ref, i
   return VehicleService.instance.getDealerById(id);
 });
 
+/// The list of actual buyer reviews for one dealer — separate from
+/// dealerDetailProvider since dealer.rating/reviewCount (the summary
+/// numbers) come back with the dealer itself, while the full review list
+/// is only needed once someone opens the "Reviews" section on that
+/// dealer's profile.
+final dealerReviewsProvider = FutureProvider.family<List<DealerReviewModel>, String>((ref, dealerId) async {
+  return VehicleService.instance.getDealerReviews(dealerId);
+});
+
 final vehicleDetailProvider = FutureProvider.family<VehicleModel?, String>((ref, id) async {
   return VehicleService.instance.getById(id);
 });

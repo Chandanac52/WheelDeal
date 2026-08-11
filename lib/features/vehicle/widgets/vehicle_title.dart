@@ -13,40 +13,20 @@ class VehicleTitle extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Text(
-                vehicle.name,
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: AppColors.primaryLight,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.star, color: AppColors.primary, size: 15),
-                  const SizedBox(width: 4),
-                  Text(
-                    vehicle.rating.toString(),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+        // FIX: this row used to end with a "★ ${vehicle.rating}" badge —
+        // a per-VEHICLE rating that never had a real source (it was always
+        // just a hardcoded 4.0 on every listing; see the removal of
+        // Vehicle.rating in schema.prisma/vehicles.js). A star rating only
+        // makes sense once someone has actually dealt with the SELLER, not
+        // the listing — that's now Dealer.rating, computed live from real
+        // buyer reviews and shown on the Dealer Profile screen instead.
+        // Just the name here now; no badge to replace it with.
+        Text(
+          vehicle.name,
+          style: const TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         const SizedBox(height: 10),
         Row(

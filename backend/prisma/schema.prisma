@@ -37,6 +37,10 @@ model User {
   chatParticipants ChatParticipant[]
   callbackRequests CallbackRequest[]
   notifications    Notification[]
+  // Reviews this user has LEFT on dealers, as a buyer. Not reviews of
+  // them — a User has no reviews-received relation of their own; only a
+  // Dealer does (see Dealer.reviews below). See Review model for why.
+  reviews          Review[]
 }
 
 enum UserRole {
@@ -50,7 +54,6 @@ model Dealer {
   id         String   @id @default(cuid())
   name       String
   logo       String?
-  rating     Float    @default(4.5)
   totalCars  Int      @default(0)
   location   String
   isVerified Boolean  @default(false)
@@ -59,6 +62,45 @@ model Dealer {
   vehicles Vehicle[]
   // Accounts authorized to sell on behalf of this dealer — see User.dealerId.
   users    User[]
+  // Ratings buyers have actually left for this dealer. There used to be a
+  // `rating Float @default(4.5)` column directly on this model — a number
+  // nobody ever set and nothing ever updated, so every dealer just showed
+  // whatever value seed data happened to type in. A rating is only
+  // meaningful once someone with a real transaction has given it, so it's
+  // now this relation instead: dealers.js computes the live average +
+  // count from these rows on every request (the same "compute fresh, never
+  // store a stale number" pattern already used for isFeatured and soldCount
+  // in vehicles.js), and a dealer with zero reviews honestly shows as
+  // unrated rather than defaulting to a fake 4.5.
+  //
+  // Deliberately NOT on Vehicle: a star rating only makes sense once
+  // someone has actually dealt with the seller — you can't honestly rate a
+  // listing before buying the vehicle it's for, and OLX-style marketplaces
+  // don't pretend otherwise. Individual (non-dealer) sellers also have no
+  // rating anywhere for the same reason: this relation only attaches to
+  // Dealer, not User.
+  reviews    Review[]
+}
+
+// One buyer's rating of one dealer, based on having actually dealt with
+// them (chatted, called, or bought). @@unique below caps it at one review
+// per (dealer, buyer) — submitting again is an UPDATE to their existing
+// review (see the upsert in dealers.js), not a second row, so one person
+// spamming 1-star reviews can't tank a dealer's average by repetition.
+model Review {
+  id        String   @id @default(cuid())
+  dealerId  String
+  buyerId   String
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  dealer Dealer @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  buyer  User   @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+
+  @@unique([dealerId, buyerId])
+  @@index([dealerId])
 }
 
 model Vehicle {
@@ -70,7 +112,6 @@ model Vehicle {
   originalPrice   Int?
   discountPercent Int?
   isFeatured      Boolean  @default(false)
-  rating          Float    @default(4.0)
   fuelType        String
   transmission    String
   year            String
