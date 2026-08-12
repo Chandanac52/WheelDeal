@@ -2,12 +2,32 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../services/providers/favorites_provider.dart';
+import 'chat_start_helper.dart';
 
 /// Back + favorite circular buttons overlaid on top of the image gallery.
 class VehicleHeaderOverlay extends ConsumerWidget {
   final String vehicleId;
 
   const VehicleHeaderOverlay({super.key, required this.vehicleId});
+
+  // FIX: same root cause as FeaturedCarCard's heart — this called
+  // favoritesProvider.notifier.toggle() directly with no sign-in check.
+  // favorites_provider.dart's toggle() is optimistic: it fills the heart
+  // immediately, then calls the API, and SILENTLY REVERTS it in the catch
+  // block on any failure — including the 401 a signed-out tap always gets.
+  // That optimistic-fill-then-silent-revert is exactly what looked like a
+  // "flicker." Gating here the same way chat/call/callback/favorite
+  // already are (via the one shared ensureSignedIn()) means toggle() is
+  // never even called for a signed-out tap, so there's nothing to revert.
+  Future<void> _handleFavoriteTap(BuildContext context, WidgetRef ref) async {
+    final signedIn = await ensureSignedIn(
+      context,
+      ref,
+      message: 'Create a free account or sign in to save vehicles to your favorites.',
+    );
+    if (!signedIn) return;
+    ref.read(favoritesProvider.notifier).toggle(vehicleId);
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -25,8 +45,7 @@ class VehicleHeaderOverlay extends ConsumerWidget {
           _CircleButton(
             icon: isFavorite ? Icons.favorite : Icons.favorite_border,
             iconColor: isFavorite ? Colors.red : Colors.black87,
-            onTap: () =>
-                ref.read(favoritesProvider.notifier).toggle(vehicleId),
+            onTap: () => _handleFavoriteTap(context, ref),
           ),
         ],
       ),

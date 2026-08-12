@@ -453,6 +453,33 @@ router.put(
       include: { dealer: true },
     });
 
+    // Tell everyone who favorited this vehicle that it's gone, the moment
+    // it actually goes — same reasoning, and the same shape, as the
+    // price-drop notification below in PUT /:id: someone who bothered to
+    // save a listing deserves to know why it silently vanished off their
+    // Favorites tab, instead of just disappearing with no explanation.
+    // Only fires on a genuine ACTIVE→SOLD transition (never on a re-save
+    // that leaves status unchanged, and never on a relist back to ACTIVE —
+    // that's a "welcome back," not a "sold" event, and isn't what anyone
+    // favorited it hoping to hear).
+    if (req.body.status === 'SOLD' && existing.status !== 'SOLD') {
+      const favorites = await prisma.favorite.findMany({
+        where: { vehicleId: req.params.id, userId: { not: req.user.id } },
+      });
+      for (const fav of favorites) {
+        const notification = await prisma.notification.create({
+          data: {
+            userId: fav.userId,
+            type: 'sold',
+            title: 'Vehicle sold',
+            body: `${vehicle.name}, which you saved, has been marked as sold.`,
+            relatedVehicleId: vehicle.id,
+          },
+        });
+        emitNewNotification(fav.userId, notification);
+      }
+    }
+
     const featuredIds = await getFeaturedIds();
     // This seller's own sold count just changed as a direct result of this
     // call — recompute fresh rather than reusing a value from before the

@@ -174,6 +174,19 @@ router.post(
     const dealer = await prisma.dealer.findUnique({ where: { id: req.params.id } });
     if (!dealer) return res.status(404).json({ error: 'Dealer not found' });
 
+    // FIX: nothing here used to stop a seller who's LINKED to this exact
+    // dealer (req.user.dealerId === dealer.id — see the comment on
+    // User.dealerId in schema.prisma) from rating their own dealer. A
+    // rating is supposed to be an independent buyer's signal of trust;
+    // letting someone tied to the dealer pad their own average is the
+    // same conflict of interest as a shop rating itself five stars.
+    // Checked by dealerId, not name/ownership guesswork, since dealerId
+    // is the one authoritative link between an account and a dealer
+    // everywhere else in this codebase (see POST /vehicles in vehicles.js).
+    if (req.user.dealerId === dealer.id) {
+      return res.status(403).json({ error: "You can't rate a dealer you're affiliated with." });
+    }
+
     const review = await prisma.review.upsert({
       where: { dealerId_buyerId: { dealerId: req.params.id, buyerId: req.user.id } },
       create: {

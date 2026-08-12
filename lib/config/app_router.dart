@@ -27,6 +27,15 @@ class AppRouter {
           return VehicleDetailsScreen(vehicleId: id);
         },
       ),
+      // There is no separate "edit vehicle" screen — creating a new
+      // listing and editing an existing one are the same form
+      // (SellVehicleScreen), just told which mode to run in via
+      // editVehicleId. Passing an id here makes it load that vehicle and
+      // prefill the form (then call VehicleService.updateListing on save);
+      // the '/sell' entry point elsewhere in the app calls this same
+      // widget with no editVehicleId, so it starts blank and calls
+      // createListing instead. Worth knowing before searching the
+      // codebase for a file that isn't there — see sell_vehicle_screen.dart.
       GoRoute(
         path: '/edit-vehicle/:id',
         builder: (context, state) {

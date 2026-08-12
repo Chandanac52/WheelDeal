@@ -104,29 +104,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final auth = ref.watch(authProvider);
 
     if (!auth.isAuthenticated) {
-      return SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.person_outline, size: 64, color: AppColors.textSecondary),
-                const SizedBox(height: 16),
-                const Text(
-                  'Sign in to access your profile',
-                  style: TextStyle(fontSize: 16, color: AppColors.textSecondary),
-                ),
-                const SizedBox(height: 24),
-                ElevatedButton(
-                  onPressed: () => context.push('/login'),
-                  child: const Text('Sign In'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
+      return const SafeArea(child: _SignedOutProfileView());
     }
 
     final user = auth.user!;
@@ -198,11 +176,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         user.name,
                         style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                       ),
-                      // FIX: this used to be printed a second time right below via
-                      // `if (user.phone != null) Text(user.phone!, ...)`, which is why
-                      // the number showed up twice under the name. There's only ever
-                      // one identity string to show (phone, or email as a fallback for
-                      // any legacy account that still has one) — one Text is correct.
+                      // Only ever one identity string shown here (phone, or
+                      // email as a fallback for any legacy account that
+                      // still has one) — never printed twice.
                       Text(user.phone ?? user.email ?? '', style: const TextStyle(color: AppColors.textSecondary)),
                     ],
                   ),
@@ -277,11 +253,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                         const SizedBox(height: 12),
                         SizedBox(
-                          // FIX: FeaturedCarCard is sized everywhere else (Home, Search)
-                          // inside a GridView with childAspectRatio: 0.68, i.e. height ≈
-                          // width ÷ 0.68. At width 170 that's ~250, not 220 — 220 was
-                          // 13px short and clipped the price row, which is exactly the
-                          // "BOTTOM OVERFLOWED BY 13 PIXELS" you saw.
+                          // FeaturedCarCard is sized everywhere else (Home,
+                          // Search) inside a GridView with
+                          // childAspectRatio: 0.68, i.e. height ≈ width ÷
+                          // 0.68. At width 170 that's ~250.
                           height: 250,
                           child: ListView.separated(
                             scrollDirection: Axis.horizontal,
@@ -322,17 +297,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             const SizedBox(height: 16),
             TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Name')),
             const SizedBox(height: 12),
-            // FIX: this used to be an editable TextField, and the Save
-            // button below used to send its value straight to
-            // updateProfile(phone: ...) — a call that doesn't even compile
-            // against the current AuthNotifier.updateProfile signature
-            // anymore, since phone was correctly removed from it. Phone is
-            // the verified sign-in identity (proven via Firebase OTP at
-            // login) — changing it isn't a profile edit, it's effectively
-            // switching accounts, which has to go through OTP verification
-            // for the new number, not a text field here. Shown read-only
-            // so the person can still see what number they're signed in
-            // as, without any implication it can be typed over.
+            // Phone is the verified sign-in identity (proven via Firebase
+            // OTP at login) — changing it isn't a profile edit, it's
+            // effectively switching accounts, which has to go through OTP
+            // verification for the new number, not a text field here.
+            // Shown read-only so the person can still see what number
+            // they're signed in as, without any implication it can be
+            // typed over. AuthNotifier.updateProfile (auth_provider.dart)
+            // and PUT /me (auth.js) both deliberately have no `phone`
+            // parameter anymore — this UI has to match, or the Save button
+            // below would be calling a signature that doesn't exist.
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -422,11 +396,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           // reuses the OUTER `context` (this method's own parameter, which
           // belongs to ProfileScreen and stays mounted regardless of this
           // sheet's lifecycle) for anything that happens AFTER the sheet
-          // closes: pushing to edit, or showing a SnackBar once a delete
-          // finishes. sheetContext is used only to pop the sheet itself.
-          // Using the sheet's own context for post-close actions is exactly
-          // the bug we found and fixed in contact_button.dart's Contact
-          // Seller sheet — a slow enough action (a real network delete, for
+          // closes: pushing to a listing's details/edit screen, or showing
+          // a SnackBar once a delete finishes. sheetContext is used only to
+          // pop the sheet itself or show something that lives strictly
+          // within its own lifetime (like the delete confirm dialog). Using
+          // the sheet's own context for post-close actions is exactly the
+          // bug found and fixed in contact_button.dart's Contact Seller
+          // sheet — a slow enough action (a real network delete, for
           // instance) can outlast the sheet's closing animation, leaving
           // that context unmounted and silently swallowing whatever came
           // after it.
@@ -446,23 +422,80 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     itemCount: list.length,
                     itemBuilder: (_, i) {
                       final vehicle = list[i];
+                      final isSold = vehicle.status == 'SOLD';
                       return ListTile(
-                        title: Text(vehicle.name),
+                        title: Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                vehicle.name,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            // A sold listing used to be indistinguishable
+                            // from an active one here — nothing showed the
+                            // seller it was no longer live, or hinted that
+                            // relisting was even possible.
+                            if (isSold) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppColors.textPrimary,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Text(
+                                  'SOLD',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
                         subtitle: Text('${vehicle.price} • ${vehicle.location}'),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            // Editing details (price, mileage, description,
+                            // etc.) is now its own explicit icon, separate
+                            // from the row tap below — this is the SAME
+                            // screen as "Sell" (SellVehicleScreen, reused
+                            // via editVehicleId — see app_router.dart), not
+                            // a distinct "edit vehicle" screen.
+                            IconButton(
+                              icon: const Icon(Icons.edit_outlined, color: AppColors.textSecondary),
+                              tooltip: 'Edit details',
+                              onPressed: () {
+                                Navigator.pop(sheetContext);
+                                context.push('/edit-vehicle/${vehicle.id}');
+                              },
+                            ),
                             IconButton(
                               icon: const Icon(Icons.delete_outline, color: AppColors.error),
                               tooltip: 'Delete listing',
                               onPressed: () => _confirmDeleteListing(sheetContext, context, ref, vehicle),
                             ),
-                            const Icon(Icons.chevron_right, color: AppColors.textSecondary),
                           ],
                         ),
+                        // FIX: this used to push straight to
+                        // '/edit-vehicle/${vehicle.id}' — the details FORM,
+                        // which has no status indicator and no way to
+                        // relist. "Mark as Sold" / "Relist This Vehicle"
+                        // only ever lived on the vehicle DETAILS page
+                        // (_OwnerActionBar in vehicle_details_screen.dart)
+                        // — a seller tapping a sold listing here had no
+                        // visible way back to it. The row now opens the
+                        // details page instead, where that button already
+                        // works correctly; editing the listing's fields is
+                        // still one tap away via the pencil icon above.
                         onTap: () {
                           Navigator.pop(sheetContext);
-                          context.push('/edit-vehicle/${vehicle.id}');
+                          context.push('/vehicle/${vehicle.id}');
                         },
                       );
                     },
@@ -526,7 +559,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       ref.invalidate(searchResultsProvider);
       ref.invalidate(vehicleDetailProvider(vehicle.id));
       ref.invalidate(dealerDetailProvider(vehicle.dealerId));
-          if (context.mounted) {
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('${vehicle.name} deleted'), backgroundColor: AppColors.success),
         );
@@ -538,6 +571,110 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         );
       }
     }
+  }
+}
+
+/// Shown on ProfileScreen when nobody's signed in — replaces the old bare
+/// "Sign in to access your profile" + button with an actual value prop
+/// (what signing in gets you) so the button has context instead of just
+/// gatekeeping the tab. Purely presentational; nothing here reads or
+/// writes any state.
+class _SignedOutProfileView extends StatelessWidget {
+  const _SignedOutProfileView();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 88,
+              height: 88,
+              decoration: const BoxDecoration(
+                color: AppColors.primaryLight,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.person_outline_rounded, size: 42, color: AppColors.primary),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Your account, one tap away',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Sign in to save vehicles, manage your listings, and chat directly with sellers.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, color: AppColors.textSecondary, height: 1.4),
+            ),
+            const SizedBox(height: 28),
+            const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _BenefitChip(icon: Icons.favorite_border, label: 'Favorites'),
+                SizedBox(width: 12),
+                _BenefitChip(icon: Icons.directions_car_outlined, label: 'Listings'),
+                SizedBox(width: 12),
+                _BenefitChip(icon: Icons.chat_bubble_outline, label: 'Chats'),
+              ],
+            ),
+            const SizedBox(height: 32),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => context.push('/login'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 15),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                child: const Text('Sign In', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Takes less than a minute — just your phone number.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One small icon-over-label pill used in the signed-out value-prop row
+/// above — a quiet preview of what each feature is, not a live control
+/// (none of these navigate or do anything on their own).
+class _BenefitChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _BenefitChip({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          width: 52,
+          height: 52,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: AppColors.background,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Icon(icon, size: 20, color: AppColors.primary),
+        ),
+        const SizedBox(height: 6),
+        Text(label, style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
+      ],
+    );
   }
 }
 

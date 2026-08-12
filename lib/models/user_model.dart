@@ -5,6 +5,15 @@ class UserModel {
   final String? phone;
   final String? avatar;
   final String role;
+  // Which dealer (if any) this account is authorized to sell on behalf of
+  // — mirrors User.dealerId in schema.prisma. Null for an individual
+  // seller/buyer. Currently only used to hide the "Rate this dealer"
+  // button on DealerProfileScreen for a seller viewing the dealer they're
+  // themselves linked to (see dealer_profile_screen.dart) — the backend
+  // (POST /dealers/:id/reviews in dealers.js) is still the actual
+  // enforcement; this is only ever a UI convenience on top of that, never
+  // a substitute for it, since a client-side field is trivially spoofable.
+  final String? dealerId;
 
   const UserModel({
     required this.id,
@@ -13,6 +22,7 @@ class UserModel {
     this.phone,
     this.avatar,
     this.role = 'BUYER',
+    this.dealerId,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -23,6 +33,7 @@ class UserModel {
       phone: json['phone'] as String?,
       avatar: json['avatar'] as String?,
       role: json['role'] as String? ?? 'BUYER',
+      dealerId: json['dealerId'] as String?,
     );
   }
 
@@ -33,6 +44,7 @@ class UserModel {
         'phone': phone,
         'avatar': avatar,
         'role': role,
+        'dealerId': dealerId,
       };
 
   UserModel copyWith({
@@ -47,6 +59,7 @@ class UserModel {
       phone: phone ?? this.phone,
       avatar: avatar ?? this.avatar,
       role: role,
+      dealerId: dealerId,
     );
   }
 }

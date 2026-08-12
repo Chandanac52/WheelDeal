@@ -32,6 +32,8 @@ class NotificationsScreen extends ConsumerWidget {
         return Icons.trending_down;
       case 'callback':
         return Icons.phone_callback_outlined;
+      case 'sold':
+        return Icons.sell_outlined;
       default:
         return Icons.notifications_none;
     }
@@ -45,6 +47,8 @@ class NotificationsScreen extends ConsumerWidget {
         return AppColors.success;
       case 'callback':
         return const Color(0xFF7C5FCC);
+      case 'sold':
+        return AppColors.textSecondary;
       default:
         return AppColors.textSecondary;
     }
@@ -171,7 +175,11 @@ class NotificationsScreen extends ConsumerWidget {
       context.push('/chat/${n.relatedChatId}');
     } else if (n.type == 'callback') {
       _showCallBackSheet(context, n);
-    } else if (n.type == 'price_drop' && n.relatedVehicleId != null) {
+    } else if ((n.type == 'price_drop' || n.type == 'sold') && n.relatedVehicleId != null) {
+      // A 'sold' listing is still viewable — vehicle_details_screen.dart
+      // already renders a SOLD banner and hides Call/Chat for a sold
+      // vehicle, so tapping through here still lands somewhere useful
+      // rather than a dead link.
       context.push('/vehicle/${n.relatedVehicleId}');
     }
   }

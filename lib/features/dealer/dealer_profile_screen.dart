@@ -203,13 +203,48 @@ class DealerProfileScreen extends ConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () => _openRatingSheet(context, ref),
-                    icon: const Icon(Icons.star_border),
-                    label: const Text('Rate this dealer'),
-                  ),
+                Builder(
+                  builder: (context) {
+                    final currentUser = ref.watch(authProvider).user;
+                    // Same check as the backend's actual enforcement
+                    // (POST /dealers/:id/reviews in dealers.js) — a seller
+                    // linked to THIS dealer can't rate their own dealer.
+                    // This is only a UI convenience so an affiliated
+                    // seller never sees a button that would just 403 —
+                    // the backend check is the real gate and stays in
+                    // place regardless of what this shows.
+                    final isAffiliatedSeller = currentUser?.dealerId == dealer.id;
+                    if (isAffiliatedSeller) {
+                      return Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+                        decoration: BoxDecoration(
+                          color: AppColors.background,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.info_outline, size: 16, color: AppColors.textSecondary),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                "You're linked to this dealer, so you can't rate it.",
+                                style: TextStyle(color: AppColors.textSecondary, fontSize: 12.5),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+                    return SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () => _openRatingSheet(context, ref),
+                        icon: const Icon(Icons.star_border),
+                        label: const Text('Rate this dealer'),
+                      ),
+                    );
+                  },
                 ),
                 const SizedBox(height: 28),
                 Text(

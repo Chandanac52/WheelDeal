@@ -68,6 +68,19 @@ router.post(
         phone: user.phone,
         avatar: user.avatar,
         role: user.role,
+        // FIX: this object is hand-built rather than returned straight
+        // from Prisma, and dealerId was missing from the list — meaning
+        // the very first user object the Flutter app ever sees, right at
+        // sign-in, never carried it. UserModel.fromJson would parse this
+        // as dealerId: null even for a real dealer-linked seller, and
+        // nothing corrected it until (if ever) something else re-fetched
+        // GET /me, which DOES return it (it forwards req.user wholesale,
+        // and the authenticate middleware's select already includes
+        // dealerId). Every field returned here needs to actually match
+        // what authenticate's select produces, or exactly this kind of
+        // silent, field-by-field drift is how one login path quietly
+        // disagrees with another.
+        dealerId: user.dealerId,
       },
       token,
     });
@@ -105,7 +118,18 @@ router.put(
         ...(name && { name }),
         ...(avatar !== undefined && { avatar }),
       },
-      select: { id: true, email: true, name: true, phone: true, avatar: true, role: true },
+      // FIX: dealerId was missing from this select too — same bug as
+      // firebase-login above, different route. A dealer-linked seller who
+      // simply edited their display name here would have their LOCAL
+      // client state (AuthNotifier.updateProfile sets state.user straight
+      // from this response — see auth_provider.dart) silently lose
+      // dealerId until the app was fully restarted and GET /me ran again.
+      // In the meantime the "Rate this dealer" hide-button check
+      // (dealer_profile_screen.dart) would wrongly show the button again
+      // for someone the backend would still correctly 403 — a confusing,
+      // hard-to-reproduce inconsistency for exactly the reason this
+      // comment exists: it only happens after an edit, not at login.
+      select: { id: true, email: true, name: true, phone: true, avatar: true, role: true, dealerId: true },
     });
 
     // Vehicle.sellerName is a denormalized COPY of the seller's name taken
