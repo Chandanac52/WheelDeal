@@ -120,6 +120,16 @@ model Vehicle {
   owners          String
   condition       String
   insurance       String
+  // The actual date insurance stops being valid — separate from the
+  // human-readable `insurance` string above ("Valid till 12 Dec 2027"),
+  // which exists purely for display and is NOT machine-parseable safely.
+  // This is what the expiry sweep (services/listingExpiry.js) actually
+  // checks against — a real Date column, queryable and indexable, instead
+  // of parsing a display string. Null means "no expiry tracked" (covers
+  // "Expired" / "Not Available" insurance statuses, and any older listing
+  // created before this field existed) — those are simply never touched
+  // by the sweep, not treated as already-expired.
+  insuranceValidTill DateTime?
   rcStatus        String
   soldCount       String   @default("0")
   description     String
@@ -152,6 +162,11 @@ model Vehicle {
   // feed by category, and sorting the newest active listings first.
   @@index([status, category])
   @@index([status, createdAt])
+  // Lets the expiry sweep (services/listingExpiry.js) find "ACTIVE
+  // listings whose insurance date has passed" without a full table scan —
+  // it queries exactly this pair (status = ACTIVE, insuranceValidTill in
+  // the past) on every run.
+  @@index([status, insuranceValidTill])
 }
 
 enum VehicleStatus {
@@ -159,6 +174,16 @@ enum VehicleStatus {
   SOLD
   PENDING
   REJECTED
+  // A listing the expiry sweep took down automatically because its
+  // insurance date passed while it was still ACTIVE and unsold — distinct
+  // from SOLD (a completed transaction) and from REJECTED (an admin
+  // moderation action that doesn't exist yet). Like SOLD, it's excluded
+  // from every public query (Home, Search, dealer profiles all filter to
+  // status: 'ACTIVE') but still shows up in the seller's own My Listings,
+  // where they can update the insurance date via Edit and relist it — see
+  // the guard on PUT /:id/status in vehicles.js that stops a relist from
+  // going through until the date is actually fixed.
+  EXPIRED
 }
 
 model Favorite {
@@ -232,7 +257,7 @@ model CallbackRequest {
 model Notification {
   id               String   @id @default(cuid())
   userId           String
-  // 'message' | 'price_drop' | 'callback' | 'sold' | 'system'
+  // 'message' | 'price_drop' | 'callback' | 'sold' | 'expired' | 'system'
   type             String
   title            String
   body             String

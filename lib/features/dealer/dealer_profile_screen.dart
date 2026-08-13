@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/theme/app_colors.dart';
-import '../../models/dealer_model.dart';
 import '../../services/providers/auth_provider.dart';
 import '../../services/providers/vehicle_providers.dart';
 import '../../services/repositories/vehicle_service.dart';

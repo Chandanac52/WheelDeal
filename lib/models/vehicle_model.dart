@@ -19,6 +19,13 @@ class VehicleModel {
   final String owners;
   final String condition;
   final String insurance;
+  // The actual expiry date behind the `insurance` display string above —
+  // null when there's nothing to track (insurance status isn't "Valid",
+  // or this listing predates the field entirely). Used to prefill the
+  // date picker in edit mode (SellVehicleScreen) without having to
+  // re-parse "Valid till 12 Dec 2027" back into a DateTime, which the
+  // backend only ever produced for display, not as a safe round-trip.
+  final DateTime? insuranceValidTill;
   final String rcStatus;
   final String soldCount;
   final String description;
@@ -65,6 +72,7 @@ class VehicleModel {
     this.dealerVerified = false,
     this.isFavorite = false,
     this.status = 'ACTIVE',
+    this.insuranceValidTill,
   });
 
   factory VehicleModel.fromJson(Map<String, dynamic> json) {
@@ -88,6 +96,9 @@ class VehicleModel {
       owners: json['owners'] as String,
       condition: json['condition'] as String,
       insurance: json['insurance'] as String,
+      insuranceValidTill: json['insuranceValidTill'] != null
+          ? DateTime.parse(json['insuranceValidTill'] as String)
+          : null,
       rcStatus: json['rcStatus'] as String,
       soldCount: json['soldCount'] as String? ?? '0',
       description: json['description'] as String,
@@ -127,6 +138,7 @@ class VehicleModel {
       owners: owners,
       condition: condition,
       insurance: insurance,
+      insuranceValidTill: insuranceValidTill,
       rcStatus: rcStatus,
       soldCount: soldCount,
       description: description,

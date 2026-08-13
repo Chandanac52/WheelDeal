@@ -559,6 +559,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       ref.invalidate(searchResultsProvider);
       ref.invalidate(vehicleDetailProvider(vehicle.id));
       ref.invalidate(dealerDetailProvider(vehicle.dealerId));
+      ref.invalidate(dealersProvider);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('${vehicle.name} deleted'), backgroundColor: AppColors.success),

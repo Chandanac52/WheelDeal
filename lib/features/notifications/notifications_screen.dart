@@ -34,6 +34,8 @@ class NotificationsScreen extends ConsumerWidget {
         return Icons.phone_callback_outlined;
       case 'sold':
         return Icons.sell_outlined;
+      case 'expired':
+        return Icons.event_busy_outlined;
       default:
         return Icons.notifications_none;
     }
@@ -49,6 +51,8 @@ class NotificationsScreen extends ConsumerWidget {
         return const Color(0xFF7C5FCC);
       case 'sold':
         return AppColors.textSecondary;
+      case 'expired':
+        return AppColors.error;
       default:
         return AppColors.textSecondary;
     }
@@ -175,11 +179,12 @@ class NotificationsScreen extends ConsumerWidget {
       context.push('/chat/${n.relatedChatId}');
     } else if (n.type == 'callback') {
       _showCallBackSheet(context, n);
-    } else if ((n.type == 'price_drop' || n.type == 'sold') && n.relatedVehicleId != null) {
-      // A 'sold' listing is still viewable — vehicle_details_screen.dart
-      // already renders a SOLD banner and hides Call/Chat for a sold
-      // vehicle, so tapping through here still lands somewhere useful
-      // rather than a dead link.
+    } else if ((n.type == 'price_drop' || n.type == 'sold' || n.type == 'expired') &&
+        n.relatedVehicleId != null) {
+      // An 'expired' listing is still viewable too, same as 'sold' —
+      // vehicle_details_screen.dart shows a banner for it and the owner
+      // action bar there is what actually lets the seller relist once
+      // they've updated the insurance date.
       context.push('/vehicle/${n.relatedVehicleId}');
     }
   }

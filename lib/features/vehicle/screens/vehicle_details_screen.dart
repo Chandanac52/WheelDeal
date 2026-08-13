@@ -1,6 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+// FIX: these five used to be '../../...' (only two levels up) — but this
+// file lives at lib/features/vehicle/screens/, which is THREE levels
+// below lib/ (features -> vehicle -> screens). Two levels up from here
+// lands on lib/features/, not lib/ — so '../../core/theme/app_colors.dart'
+// was resolving to a nonexistent lib/features/core/theme/app_colors.dart,
+// which is exactly why AppColors read as an undefined name. The widgets/
+// imports below are untouched and correct as-is: widgets/ is a direct
+// sibling of screens/ under vehicle/, so those only ever needed one level
+// up ('../widgets/...'), not three.
 import '../../../core/theme/app_colors.dart';
 import '../../../models/vehicle_model.dart';
 import '../../../services/providers/auth_provider.dart';
@@ -72,6 +81,15 @@ class _DetailsBodyState extends ConsumerState<_DetailsBody> {
       ref.invalidate(featuredVehiclesProvider);
       ref.invalidate(searchResultsProvider);
       ref.invalidate(myListingsProvider);
+      // FIX: marking sold/relisting a dealer-linked vehicle used to never
+      // refresh that dealer's own profile page — its "N vehicles" badge
+      // and "Available Listings" count would keep showing the pre-change
+      // numbers until the app restarted, same root cause just fixed in
+      // sell_vehicle_screen.dart's create/edit flow.
+      if (widget.vehicle.dealerId.isNotEmpty) {
+        ref.invalidate(dealerDetailProvider(widget.vehicle.dealerId));
+        ref.invalidate(dealersProvider);
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -81,6 +99,14 @@ class _DetailsBodyState extends ConsumerState<_DetailsBody> {
         );
       }
     } catch (e) {
+      // This is also where a blocked relist surfaces — the backend
+      // (PUT /:id/status in vehicles.js) returns a 400 with a specific
+      // message ("This listing's insurance date has passed. Update it via
+      // Edit before relisting.") when someone tries to relist a vehicle
+      // whose insuranceValidTill is still in the past. That message
+      // reaches here as `e` and is shown as-is, same as any other error —
+      // no special-casing needed since the backend's message already
+      // tells the seller exactly what to do next.
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(e.toString()), backgroundColor: AppColors.error),
@@ -131,6 +157,16 @@ class _DetailsBodyState extends ConsumerState<_DetailsBody> {
     final auth = ref.watch(authProvider);
     final isOwner = auth.user?.id != null && auth.user!.id == vehicle.sellerId;
     final isSold = vehicle.status == 'SOLD';
+    // A listing the automatic expiry sweep took down (services/
+    // listingExpiry.js on the backend) because its insurance date passed
+    // while it was still active and unsold. Distinct banner/copy from
+    // SOLD below — this wasn't a completed transaction, it's a paused
+    // listing the seller can fix and bring back.
+    final isExpired = vehicle.status == 'EXPIRED';
+    // Both SOLD and EXPIRED hide Call/Chat and swap the bottom bar to the
+    // owner's relist control — neither is a state a buyer should be able
+    // to act on.
+    final isInactive = isSold || isExpired;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -162,6 +198,26 @@ class _DetailsBodyState extends ConsumerState<_DetailsBody> {
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 1.5,
+                    ),
+                  ),
+                ),
+              ] else if (isExpired) ...[
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: AppColors.error,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Text(
+                    'INSURANCE EXPIRED — LISTING PAUSED',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                      fontSize: 12.5,
                     ),
                   ),
                 ),
@@ -200,7 +256,8 @@ class _DetailsBodyState extends ConsumerState<_DetailsBody> {
         ),
         child: isOwner
             ? _OwnerActionBar(
-                isSold: isSold,
+                isInactive: isInactive,
+                isExpired: isExpired,
                 updating: _updatingStatus,
                 onMarkSold: _confirmMarkSold,
                 onRelist: () => _setStatus('ACTIVE'),
@@ -212,13 +269,15 @@ class _DetailsBodyState extends ConsumerState<_DetailsBody> {
 }
 
 class _OwnerActionBar extends StatelessWidget {
-  final bool isSold;
+  final bool isInactive;
+  final bool isExpired;
   final bool updating;
   final VoidCallback onMarkSold;
   final VoidCallback onRelist;
 
   const _OwnerActionBar({
-    required this.isSold,
+    required this.isInactive,
+    required this.isExpired,
     required this.updating,
     required this.onMarkSold,
     required this.onRelist,
@@ -230,19 +289,40 @@ class _OwnerActionBar extends StatelessWidget {
       top: false,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-        child: ElevatedButton(
-          onPressed: updating ? null : (isSold ? onRelist : onMarkSold),
-          style: ElevatedButton.styleFrom(
-            minimumSize: const Size.fromHeight(52),
-            backgroundColor: isSold ? AppColors.textSecondary : AppColors.primary,
-          ),
-          child: updating
-              ? const SizedBox(
-                  height: 20,
-                  width: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                )
-              : Text(isSold ? 'Relist This Vehicle' : 'Mark as Sold'),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // A relist attempt on an EXPIRED listing may still be
+            // rejected server-side if the insurance date hasn't actually
+            // been updated yet (see PUT /:id/status in vehicles.js) — the
+            // resulting error shows as a SnackBar the same way any other
+            // failure here does. This hint just sets expectations before
+            // that tap, rather than only explaining it after a rejection.
+            if (isExpired) ...[
+              const Padding(
+                padding: EdgeInsets.only(bottom: 8),
+                child: Text(
+                  'Update the insurance date via Edit before relisting.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                ),
+              ),
+            ],
+            ElevatedButton(
+              onPressed: updating ? null : (isInactive ? onRelist : onMarkSold),
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size.fromHeight(52),
+                backgroundColor: isInactive ? AppColors.textSecondary : AppColors.primary,
+              ),
+              child: updating
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : Text(isInactive ? 'Relist This Vehicle' : 'Mark as Sold'),
+            ),
+          ],
         ),
       ),
     );

@@ -22,6 +22,7 @@ const chatRoutes = require('./routes/chats');
 const uploadRoutes = require('./routes/upload');
 const notificationRoutes = require('./routes/notifications');
 const { initSocket } = require('./socket');
+const listingExpiry = require('./services/listingExpiry');
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -64,4 +65,11 @@ httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`WheelDeal API running on http://localhost:${PORT}`);
   console.log(`Health check: http://localhost:${PORT}/health`);
   console.log(`WebSocket (chat) ready on the same port`);
+
+  // Starts the recurring "take down listings with expired insurance"
+  // sweep (services/listingExpiry.js) — placed inside the listen()
+  // callback, after the server and socket.io are actually up, so the
+  // first sweep's notifications have somewhere real to emit to instead of
+  // racing server startup.
+  listingExpiry.start();
 });

@@ -9,6 +9,8 @@ class ApiConstants {
 
   /// Local dev: Android emulator uses 10.0.2.2, iOS simulator uses localhost.
   /// Physical device: use your PC's LAN IP, e.g. http://192.168.1.5:3000
+  // static const String baseUrl = 'https://wheeldeal-o66a.onrender.com';
+
   static const String baseUrl = 'http://192.168.0.112:3000';
 
   /// When true, the app uses built-in mock data (works offline, no backend needed).

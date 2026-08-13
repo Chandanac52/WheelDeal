@@ -35,6 +35,16 @@ async function getDealerRatings(dealerIds) {
 // Shared shape for the summary fields (Home "Popular Dealers", dealer
 // list, dealer profile header) — `rating` is null and `reviewCount` is 0
 // for a dealer nobody has reviewed yet, rather than a fake default.
+//
+// `totalCars` is the count of the dealer's ACTIVE vehicles ONLY — not
+// every vehicle they've ever listed. This used to come from an
+// UNFILTERED _count.vehicles (every status included: SOLD, EXPIRED,
+// everything), while "Available Listings" on the profile screen only
+// ever showed ACTIVE ones — two different numbers, both labeled as if
+// they meant the same thing, guaranteed to drift apart the moment
+// anything sold. Both call sites below now pass a count filtered the
+// exact same way the profile's `vehicles` list itself is filtered, so
+// there's no way for the two to disagree again.
 function toDealerSummary(dealer, totalCars, ratingInfo) {
   return {
     id: dealer.id,
@@ -50,7 +60,10 @@ function toDealerSummary(dealer, totalCars, ratingInfo) {
 
 router.get('/', asyncHandler(async (_req, res) => {
   const dealers = await prisma.dealer.findMany({
-    include: { _count: { select: { vehicles: true } } },
+    // Filtered relation count (Prisma's `_count.select.<relation>.where`)
+    // — counts only vehicles matching status: 'ACTIVE', computed by the
+    // database in the same query rather than a separate JS-side filter.
+    include: { _count: { select: { vehicles: { where: { status: 'ACTIVE' } } } } },
   });
 
   const ratings = await getDealerRatings(dealers.map((d) => d.id));
@@ -80,7 +93,15 @@ router.get('/', asyncHandler(async (_req, res) => {
 
   res.json({
     dealers: withRatings.map(({ dealer, ratingInfo }) =>
-      toDealerSummary(dealer, dealer._count.vehicles || dealer.totalCars, ratingInfo)
+      // FIX: was `dealer._count.vehicles || dealer.totalCars` — besides
+      // the unfiltered-count problem above, `||` on a genuine 0 falls
+      // through to the stale dealer.totalCars column too (0 is falsy in
+      // JS), so a dealer with zero ACTIVE vehicles would have shown
+      // whatever number seed data happened to type into that column
+      // instead of an honest 0. _count.vehicles is always a real number
+      // here (Prisma populates it whenever requested), so there's nothing
+      // to fall back to.
+      toDealerSummary(dealer, dealer._count.vehicles, ratingInfo)
     ),
   });
 }));
@@ -93,7 +114,11 @@ router.get('/:id', optionalAuth, asyncHandler(async (req, res) => {
       // reads vehicle.dealer.name to fill dealerName, and without it every
       // vehicle in the profile would silently show "Independent Seller".
       vehicles: { where: { status: 'ACTIVE' }, include: { dealer: true } },
-      _count: { select: { vehicles: true } },
+      // Same filtered count as GET / above — this is what makes the
+      // "N vehicles" badge and "Available Listings (N)" below it always
+      // agree, since both now come from the identical status: 'ACTIVE'
+      // rule instead of two independently-drifting numbers.
+      _count: { select: { vehicles: { where: { status: 'ACTIVE' } } } },
     },
   });
 

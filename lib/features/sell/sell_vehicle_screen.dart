@@ -135,18 +135,32 @@ class _SellVehicleScreenState extends ConsumerState<SellVehicleScreen> {
     _phoneCtrl.text = vehicle.sellerPhone;
     _descCtrl.text = vehicle.description;
 
-    final insurance = vehicle.insurance;
+    // FIX: this used to re-parse the human-readable `insurance` string
+    // ("Valid till 12 Dec 2027") back into a DateTime, which is exactly
+    // the kind of lossy round-trip the comment above it warned about for
+    // originalPrice — a display string was never meant to be parsed back.
+    // The backend now sends the actual date separately
+    // (vehicle.insuranceValidTill, a real DateTime — see
+    // VehicleModel/vehicles.js), so this just reads that directly. The
+    // string-parsing fallback stays only for a listing created before
+    // this field existed, where insuranceValidTill is null but the old
+    // display string might still carry a real date worth recovering.
     String insuranceStatus = 'Valid';
-    DateTime? insuranceExpiry;
-    if (insurance.startsWith('Valid till ')) {
+    DateTime? insuranceExpiry = vehicle.insuranceValidTill;
+    if (insuranceExpiry != null) {
       insuranceStatus = 'Valid';
-      try {
-        insuranceExpiry = DateFormat('d MMM yyyy').parse(insurance.substring('Valid till '.length));
-      } catch (_) {
-        insuranceExpiry = null;
+    } else {
+      final insurance = vehicle.insurance;
+      if (insurance.startsWith('Valid till ')) {
+        insuranceStatus = 'Valid';
+        try {
+          insuranceExpiry = DateFormat('d MMM yyyy').parse(insurance.substring('Valid till '.length));
+        } catch (_) {
+          insuranceExpiry = null;
+        }
+      } else if (_insuranceOptions.contains(insurance)) {
+        insuranceStatus = insurance;
       }
-    } else if (_insuranceOptions.contains(insurance)) {
-      insuranceStatus = insurance;
     }
 
     setState(() {
@@ -175,10 +189,23 @@ class _SellVehicleScreenState extends ConsumerState<SellVehicleScreen> {
 
   Future<void> _pickInsuranceExpiry() async {
     final now = DateTime.now();
+    // FIX: firstDate used to be `DateTime(now.year - 5)` — five years in
+    // the PAST — which is why any earlier date this month, or any date
+    // at all going back years, was selectable for something that's
+    // supposed to be an EXPIRY date. An insurance policy that already
+    // expired yesterday isn't "valid" (that's what the "Expired" option
+    // in the dropdown above is for); a date picked here has to be today
+    // or later, or it doesn't describe a still-valid policy at all.
+    // today (not `now`, which carries the current time-of-day) is used
+    // as firstDate specifically so TODAY itself stays selectable — a
+    // policy that expires later today is still valid right now.
+    final today = DateTime(now.year, now.month, now.day);
     final picked = await showDatePicker(
       context: context,
-      initialDate: _insuranceExpiry ?? now,
-      firstDate: DateTime(now.year - 5),
+      initialDate: (_insuranceExpiry != null && !_insuranceExpiry!.isBefore(today))
+          ? _insuranceExpiry
+          : today,
+      firstDate: today,
       lastDate: DateTime(now.year + 10),
     );
     if (picked != null) setState(() => _insuranceExpiry = picked);
@@ -263,16 +290,27 @@ class _SellVehicleScreenState extends ConsumerState<SellVehicleScreen> {
         'owners': _owners,
         'condition': _condition,
         'insurance': _composeInsurance(),
+        // The real date behind the display string above — null clears it
+        // (e.g. insurance status was changed away from "Valid"). This is
+        // what the backend's automatic expiry sweep actually checks
+        // against; the display string alone is never parsed for that.
+        'insuranceValidTill':
+            (_insuranceStatus == 'Valid' && _insuranceExpiry != null) ? _insuranceExpiry!.toIso8601String() : null,
         'rcStatus': _rcStatus,
         'description': _descCtrl.text.trim(),
         'images': imageUrls,
       };
 
-      if (_isEditing) {
-        await VehicleService.instance.updateListing(widget.editVehicleId!, payload);
-      } else {
-        await VehicleService.instance.createListing(payload);
-      }
+      // Captured rather than discarded: the response tells us whether
+      // this listing is attributed to a dealer (savedVehicle.dealerId),
+      // which is what's needed right below to refresh that dealer's own
+      // profile too — the seller's own account isn't enough to know this
+      // reliably from here (an edit doesn't change dealer affiliation,
+      // but reading it straight off what the server actually stored is
+      // more direct than re-deriving it from auth state).
+      final savedVehicle = _isEditing
+          ? await VehicleService.instance.updateListing(widget.editVehicleId!, payload)
+          : await VehicleService.instance.createListing(payload);
 
       // The listing is now live on the server — refresh every screen that
       // shows vehicle data so this change shows up immediately without
@@ -284,6 +322,15 @@ class _SellVehicleScreenState extends ConsumerState<SellVehicleScreen> {
       ref.invalidate(searchResultsProvider);
       ref.invalidate(myListingsProvider);
       if (_isEditing) ref.invalidate(vehicleDetailProvider(widget.editVehicleId!));
+      // FIX: this listing being new/changed used to never touch the
+      // dealer profile at all — a dealer-linked seller adding or editing
+      // a listing left that dealer's own profile page (and its "N
+      // vehicles" badge on Home's "Popular Dealers") showing whatever was
+      // cached from before this save, until the app was fully restarted.
+      if (savedVehicle.dealerId.isNotEmpty) {
+        ref.invalidate(dealerDetailProvider(savedVehicle.dealerId));
+        ref.invalidate(dealersProvider);
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -455,6 +502,14 @@ class _SellVehicleScreenState extends ConsumerState<SellVehicleScreen> {
             if (_insuranceStatus == 'Valid') ...[
               const SizedBox(height: 14),
               _insuranceExpiryPicker(),
+              const Padding(
+                padding: EdgeInsets.only(top: 4, left: 4),
+                child: Text(
+                  "If this date passes while the vehicle's still listed and unsold, "
+                  "the listing is automatically taken down and you'll be notified.",
+                  style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                ),
+              ),
             ],
             const SizedBox(height: 14),
             _field(_descCtrl, 'Description', 'Describe condition, features...', maxLines: 4),

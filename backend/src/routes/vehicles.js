@@ -36,6 +36,19 @@ function computeDiscountPercent(price, originalPrice) {
   return Math.round(((originalPrice - price) / originalPrice) * 100);
 }
 
+// Parses the optional insuranceValidTill date the client sends (an ISO
+// string from Flutter's DateTime.toIso8601String()). express-validator's
+// isISO8601() check below already guarantees the format is well-formed by
+// the time this runs, so this is just the parse — but still returns null
+// rather than an Invalid Date on anything unparseable, since a bad date
+// silently corrupting the expiry sweep's query would be far worse than
+// just not tracking one.
+function parseInsuranceValidTill(value) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 // "Featured" is a LIVE ranking, not a stored flag: most-favorited active
 // listings first, then highest-rated, then most recently listed as a
 // tiebreaker (so a brand-new listing with zero favorites yet still gets a
@@ -121,6 +134,12 @@ function toVehicleResponse(vehicle, favoriteIds = new Set(), featuredIds = new S
     owners: vehicle.owners,
     condition: vehicle.condition,
     insurance: vehicle.insurance,
+    // ISO string (or null) — the machine-checkable counterpart to the
+    // `insurance` display string above. SellVehicleScreen (Flutter) reads
+    // this to prefill the date picker in edit mode, rather than
+    // re-parsing "Valid till 12 Dec 2027" back into a Date, which is
+    // exactly the kind of lossy round-trip that quietly breaks later.
+    insuranceValidTill: vehicle.insuranceValidTill,
     rcStatus: vehicle.rcStatus,
     // String, to match the existing frontend model (VehicleModel.soldCount
     // is a String) — same live-computed value, just formatted the way the
@@ -246,6 +265,7 @@ router.post(
     body('description').trim().notEmpty(),
     body('location').trim().notEmpty(),
     body('sellerPhone').trim().notEmpty(),
+    body('insuranceValidTill').optional({ values: 'falsy' }).isISO8601(),
   ],
   async (req, res) => {
     const errors = validationResult(req);
@@ -256,6 +276,7 @@ router.post(
     const data = req.body;
     const price = parseInt(data.price, 10);
     const originalPrice = data.originalPrice ? parseInt(data.originalPrice, 10) : null;
+    const insuranceValidTill = parseInsuranceValidTill(data.insuranceValidTill);
 
     if (originalPrice !== null && originalPrice <= price) {
       return res.status(400).json({
@@ -281,6 +302,7 @@ router.post(
         owners: data.owners || '1 Owner',
         condition: data.condition || 'Good',
         insurance: data.insurance || 'Valid',
+        insuranceValidTill,
         rcStatus: data.rcStatus || 'Clear',
         description: data.description,
         location: data.location,
@@ -330,6 +352,7 @@ router.put(
     body('description').trim().notEmpty(),
     body('location').trim().notEmpty(),
     body('sellerPhone').trim().notEmpty(),
+    body('insuranceValidTill').optional({ values: 'falsy' }).isISO8601(),
   ],
   async (req, res) => {
     const errors = validationResult(req);
@@ -350,6 +373,14 @@ router.put(
     const data = req.body;
     const price = parseInt(data.price, 10);
     const originalPrice = data.originalPrice ? parseInt(data.originalPrice, 10) : null;
+    // Whatever the form sends replaces the old value outright, including
+    // an explicit null (insurance status changed away from "Valid", or
+    // the date field was cleared) — same "no partial-keep" treatment as
+    // every other field on this route, rather than falling back to
+    // `existing.insuranceValidTill` the way a plain omitted-field default
+    // would, which could leave a stale expiry date attached to a listing
+    // whose insurance status no longer says "Valid" at all.
+    const insuranceValidTill = parseInsuranceValidTill(data.insuranceValidTill);
 
     if (originalPrice !== null && originalPrice <= price) {
       return res.status(400).json({
@@ -378,6 +409,7 @@ router.put(
         owners: data.owners || existing.owners,
         condition: data.condition || existing.condition,
         insurance: data.insurance || existing.insurance,
+        insuranceValidTill,
         rcStatus: data.rcStatus || existing.rcStatus,
         description: data.description,
         location: data.location,
@@ -445,6 +477,24 @@ router.put(
     }
     if (existing.sellerId !== req.user.id) {
       return res.status(403).json({ error: 'You can only update your own listings' });
+    }
+
+    // A relist (→ ACTIVE) is blocked while the listing's tracked
+    // insurance date is still in the past — otherwise this would just
+    // reactivate it for the few minutes until the next expiry sweep
+    // (services/listingExpiry.js) took it straight back down again,
+    // which is confusing and pointless. This applies whether the listing
+    // got here via the sweep (status already EXPIRED) or was simply
+    // ACTIVE the whole time with a stale date nobody noticed — either
+    // way, "relist" only means something once the underlying problem
+    // (an expired insurance date) is actually fixed via Edit first.
+    // Listings with no tracked date at all (insuranceValidTill: null —
+    // insurance status "Expired"/"Not Available", or never set) are
+    // unaffected; there's nothing here to be stale.
+    if (req.body.status === 'ACTIVE' && existing.insuranceValidTill && existing.insuranceValidTill < new Date()) {
+      return res.status(400).json({
+        error: 'This listing\'s insurance date has passed. Update it via Edit before relisting.',
+      });
     }
 
     const vehicle = await prisma.vehicle.update({
