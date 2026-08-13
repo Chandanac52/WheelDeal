@@ -3,18 +3,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app/app.dart';
+import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Requires android/app/google-services.json (and ios/Runner/GoogleService-Info.plist
-  // for iOS) from your own Firebase project — see DEPLOYMENT_GUIDE.md "Phone OTP Login".
-  // Wrapped in try/catch so the rest of the app still works before you've set
-  // that up; only the phone-login screen needs Firebase to actually be configured.
   try {
-    await Firebase.initializeApp();
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
   } catch (e) {
-    debugPrint('Firebase not configured yet — phone OTP login will be unavailable: $e');
+    debugPrint(
+      'Firebase not configured yet — phone OTP login will be unavailable: $e',
+    );
   }
 
   runApp(
