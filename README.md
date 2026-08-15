@@ -1,4 +1,4 @@
-# WheelDeal — Used Vehicle Marketplace
+# WheelDeal - Used Vehicle Marketplace
 
 **WheelDeal** is a Flutter mobile app for buying and selling used cars, bikes, and scooters in India. It includes a full Node.js REST API backend with PostgreSQL.
 
@@ -11,7 +11,7 @@
 | **Database** | PostgreSQL schema via Prisma ORM |
 | **Dummy Images** | Placeholder photos in `assets/images/` (replace before launch) |
 
-## Quick Start (Demo Mode — No Backend)
+## Quick Start (Demo Mode - No Backend)
 
 The app runs **offline with mock data** by default:
 
@@ -19,8 +19,6 @@ The app runs **offline with mock data** by default:
 flutter pub get
 flutter run
 ```
-
-Demo login (when backend is connected): `demo@wheeldeal.com` / `Demo@123`
 
 ## Connect to Backend
 
