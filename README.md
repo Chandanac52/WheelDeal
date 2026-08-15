@@ -11,7 +11,7 @@
 | **Database** | PostgreSQL schema via Prisma ORM |
 | **Dummy Images** | Placeholder photos in `assets/images/` (replace before launch) |
 
-## Quick Start (Demo Mode - No Backend)
+## Quick Start 
 
 The app runs **offline with mock data** by default:
 
